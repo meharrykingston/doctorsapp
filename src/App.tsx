@@ -21,6 +21,7 @@ import TeleconsultRoom from './pages/teleconsult-room/teleconsult-room'
 import Wallet from './pages/wallet/wallet'
 import type { AppRoute } from './types/routes'
 import { getDoctorSession } from './services/authApi'
+import InstallPrompt from './app/InstallPrompt'
 import './App.css'
 
 function App() {
@@ -51,6 +52,7 @@ function App() {
         {route === 'notifications' && <DoctorNotifications onNavigate={setRoute} />}
         {route === 'freelance-cases' && <FreelanceCases onNavigate={setRoute} />}
       </div>
+      <InstallPrompt />
     </main>
   )
 }
