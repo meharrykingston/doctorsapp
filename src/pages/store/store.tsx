@@ -494,14 +494,15 @@ function Store({ onNavigate }: StoreProps) {
                 <strong>{formatINR(product.price)}</strong>
                 <button
                   type="button"
-                  className="buy-btn"
+                  className="buy-btn icon-only-action"
                   onClick={(event) => {
                     event.stopPropagation()
                     addToCart(product.id)
                   }}
                   disabled={!product.inStock}
+                  aria-label="Add to cart"
                 >
-                  <AppIcon name="cart" className="btn-icon" /> Add to Cart
+                  <AppIcon name="cart" className="btn-icon" />
                 </button>
               </div>
             </article>
@@ -596,8 +597,8 @@ function Store({ onNavigate }: StoreProps) {
           <section className="product-modal-card cart-sheet" onClick={(event) => event.stopPropagation()}>
             <header>
               <h3>Your Cart</h3>
-              <button type="button" className="ghost" onClick={() => setIsCartOpen(false)}>
-                Close
+              <button type="button" className="ghost icon-only-action" onClick={() => setIsCartOpen(false)} aria-label="Close cart">
+                <AppIcon name="close" className="btn-icon" />
               </button>
             </header>
 
