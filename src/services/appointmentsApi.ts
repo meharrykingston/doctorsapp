@@ -19,6 +19,14 @@ export type AppointmentRecord = {
   patient_name?: string | null
   patient_avatar_url?: string | null
   opd_visits?: Array<{ patient_eta_minutes?: number | null; clinic_location?: string | null; status?: string | null }>
+  teleconsult_sessions?: Array<{
+    id: string
+    company_id?: string | null
+    employee_id?: string | null
+    doctor_id?: string | null
+    scheduled_at?: string | null
+    status?: string | null
+  }>
 }
 
 export async function fetchAppointments(query: {

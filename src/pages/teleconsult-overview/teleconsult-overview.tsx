@@ -9,6 +9,10 @@ type TeleconsultOverviewProps = {
 
 type TeleconsultCase = {
   id: string
+  appointmentId?: string
+  teleconsultSessionId?: string
+  employeeId?: string
+  companyId?: string
   name: string
   initials: string
   reason: string

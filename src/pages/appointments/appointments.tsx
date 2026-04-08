@@ -14,6 +14,9 @@ type Segment = 'today' | 'upcoming' | 'past'
 
 type AppointmentItem = {
   id: string
+  teleconsultSessionId?: string
+  employeeId?: string
+  companyId?: string
   initials: string
   name: string
   photo: string
@@ -66,6 +69,9 @@ function toAppointmentItem(item: AppointmentRecord): AppointmentItem {
   }
   return {
     id: item.id,
+    teleconsultSessionId: item.teleconsult_sessions?.[0]?.id ?? undefined,
+    employeeId: item.employee_id ?? item.teleconsult_sessions?.[0]?.employee_id ?? undefined,
+    companyId: item.company_id ?? item.teleconsult_sessions?.[0]?.company_id ?? undefined,
     initials: patientName.slice(0, 2).toUpperCase(),
     name: patientName,
     photo: item.patient_avatar_url ?? fallbackAvatar(patientName),
@@ -159,7 +165,12 @@ function Appointments({ onNavigate }: AppointmentsProps) {
   function openTeleconsultCase(item: AppointmentItem) {
     const payload = {
       id: item.id,
+      appointmentId: item.id,
+      teleconsultSessionId: item.teleconsultSessionId,
+      employeeId: item.employeeId,
+      companyId: item.companyId,
       name: item.name,
+      patientName: item.name,
       initials: item.initials,
       reason: item.reason,
       symptoms: item.symptoms,

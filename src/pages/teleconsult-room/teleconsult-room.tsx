@@ -11,6 +11,10 @@ type TeleconsultRoomProps = {
 
 type TeleconsultCase = {
   id: string
+  appointmentId?: string
+  teleconsultSessionId?: string
+  employeeId?: string
+  companyId?: string
   name: string
   initials: string
 }
@@ -26,6 +30,10 @@ function readCase(): TeleconsultCase {
     const parsed = JSON.parse(raw) as Partial<TeleconsultCase>
     return {
       id: parsed.id ?? 'APT-1',
+      appointmentId: parsed.appointmentId ?? parsed.id ?? 'APT-1',
+      teleconsultSessionId: parsed.teleconsultSessionId ?? '',
+      employeeId: parsed.employeeId ?? '',
+      companyId: parsed.companyId ?? '',
       name: parsed.name ?? 'Patient',
       initials: parsed.initials ?? 'PT',
     }
@@ -49,7 +57,7 @@ function TeleconsultRoom({ onNavigate }: TeleconsultRoomProps) {
   const profile = getDoctorProfile()
   const doctorName = profile.fullName ?? 'Doctor'
   const doctorId = profile.userId ?? (profile.mobile ?? 'doctor-demo').replace(/\s+/g, '')
-  const companyId = (import.meta.env.VITE_COMPANY_ID as string | undefined) ?? 'hcltech'
+  const companyId = currentCase.companyId || (import.meta.env.VITE_COMPANY_ID as string | undefined) || 'hcltech'
 
   function teardownCall() {
     if (peerRef.current) {
@@ -89,14 +97,14 @@ function TeleconsultRoom({ onNavigate }: TeleconsultRoomProps) {
         setHelperMessage('Joining your consultation room...')
 
         const storageSessionKey = `doctor:teleconsult:session:${currentCase.id}`
-        let sessionId = window.sessionStorage.getItem(storageSessionKey) ?? ''
+        let sessionId = currentCase.teleconsultSessionId || window.sessionStorage.getItem(storageSessionKey) || ''
 
         if (!sessionId) {
           const created = await createTeleconsultSession({
             companyId,
-            employeeId: `employee-${currentCase.initials.toLowerCase()}`,
+            employeeId: currentCase.employeeId || `employee-${currentCase.initials.toLowerCase()}`,
             doctorId,
-            appointmentId: currentCase.id,
+            appointmentId: currentCase.appointmentId || currentCase.id,
           })
           sessionId = created.sessionId
           window.sessionStorage.setItem(storageSessionKey, sessionId)
