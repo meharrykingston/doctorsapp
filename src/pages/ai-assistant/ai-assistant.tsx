@@ -22,6 +22,10 @@ const defaultSuggestions = [
   'Red flags to rule out?',
 ]
 const THREAD_STORAGE_KEY = 'doctor_ai_thread_id'
+const TYPING_BASE_DELAY_MS = 60
+const TYPING_VARIANCE_MS = 30
+const TYPING_PUNCTUATION_PAUSE_MS = 320
+const TYPING_START_DELAY_MS = 360
 
 function nowTime() {
   const d = new Date()
@@ -78,10 +82,17 @@ function AiAssistant({ onNavigate }: AiAssistantProps) {
   const [quickReplies, setQuickReplies] = useState(defaultSuggestions)
   const messagesRef = useRef<Message[]>(messages)
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  const typingSessionRef = useRef(0)
 
   useEffect(() => {
     messagesRef.current = messages
   }, [messages])
+
+  useEffect(() => {
+    return () => {
+      typingSessionRef.current += 1
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -117,6 +128,43 @@ function AiAssistant({ onNavigate }: AiAssistantProps) {
     return contextualSuggestions(draft)
   }, [draft, quickReplies])
 
+  const typeAiMessage = async (message: Message) => {
+    const session = typingSessionRef.current + 1
+    typingSessionRef.current = session
+
+    setMessages((prev) => [...prev, { ...message, text: '' }])
+
+    const fullText = message.text
+    if (!fullText) return
+
+    await new Promise<void>((resolve) => {
+      let index = 0
+      const step = () => {
+        if (typingSessionRef.current !== session) {
+          resolve()
+          return
+        }
+
+        index += 1
+        const nextText = fullText.slice(0, index)
+        setMessages((prev) => prev.map((item) => (item.id === message.id ? { ...item, text: nextText } : item)))
+
+        if (index >= fullText.length) {
+          resolve()
+          return
+        }
+
+        const currentChar = fullText[index - 1] ?? ''
+        const punctuationPause = /[,.!?]/.test(currentChar) ? TYPING_PUNCTUATION_PAUSE_MS : 0
+        const jitter = Math.floor(Math.random() * TYPING_VARIANCE_MS)
+        const delay = TYPING_BASE_DELAY_MS + jitter + punctuationPause
+        window.setTimeout(step, delay)
+      }
+
+      window.setTimeout(step, TYPING_START_DELAY_MS)
+    })
+  }
+
   async function sendMessage(text?: string) {
     const content = (text ?? draft).trim()
     if (!content) return
@@ -140,7 +188,7 @@ function AiAssistant({ onNavigate }: AiAssistantProps) {
 
       const result = await askAiChat({
         message:
-          'You are assisting a doctor, not a patient. Give concise clinical reasoning, red flags, possible investigations, and next-step guidance.\n\n' +
+          'You are assisting a doctor, not a patient. Write like a friendly Meta-style assistant: simple language, warm tone, short sentences, and occasional tiny typos so it feels human. Keep clinical guidance concise and practical, include red flags, possible investigations, and next-step guidance.\n\n' +
           content,
         history,
         threadId,
@@ -148,27 +196,21 @@ function AiAssistant({ onNavigate }: AiAssistantProps) {
         appContext: 'doctor',
       })
 
-      setQuickReplies(result.quickReplies?.slice(0, 3).filter(Boolean) || defaultSuggestions)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `${Date.now()}-a`,
-          from: 'ai',
-          text: result.reply,
-          time: nowTime(),
-        },
-      ])
+      setQuickReplies(contextualSuggestions(content))
+      await typeAiMessage({
+        id: `${Date.now()}-a`,
+        from: 'ai',
+        text: result.reply,
+        time: nowTime(),
+      })
     } catch {
       setQuickReplies(defaultSuggestions)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `${Date.now()}-fallback`,
-          from: 'ai',
-          text: 'AI is retrying. For now, share age, duration, vitals, comorbidities, and your provisional diagnosis so I can structure the case better.',
-          time: nowTime(),
-        },
-      ])
+      await typeAiMessage({
+        id: `${Date.now()}-fallback`,
+        from: 'ai',
+        text: 'AI is retrying. For now, share age, duration, vitals, comorbidities, and your provisional diagnosis so I can structure the case better.',
+        time: nowTime(),
+      })
     } finally {
       setIsTyping(false)
     }

@@ -1,5 +1,7 @@
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL
-const DEFAULT_BASE = 'https://astikan-backend-production.up.railway.app/api'
+const PROD_BASE = 'https://astikan-backend-production.up.railway.app/api'
+const DEV_BASE = '/api'
+const DEFAULT_BASE = import.meta.env.DEV ? DEV_BASE : PROD_BASE
 const API_BASE_URL =
   typeof RAW_BASE === 'string' && RAW_BASE.trim() && RAW_BASE !== 'undefined' && RAW_BASE !== 'null'
     ? RAW_BASE.replace(/\/+$/, '')

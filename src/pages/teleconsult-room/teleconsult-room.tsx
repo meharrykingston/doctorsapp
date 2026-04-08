@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AppIcon } from '../../components/ui/icons'
-import { createTeleconsultSession, joinTeleconsultSession, type TeleconsultRtcPayload } from '../../services/teleconsultApi'
+import { createTeleconsultSession, joinTeleconsultSession } from '../../services/teleconsultApi'
 import type { AppRoute } from '../../types/routes'
 import { getDoctorProfile } from '../../utils/doctorProfile'
 import './teleconsult-room.css'
@@ -18,8 +18,6 @@ type TeleconsultCase = {
 type Phase = 'connecting' | 'live' | 'error' | 'ended'
 
 const CASE_STORAGE_KEY = 'doctor:teleconsultCase'
-const ZEGO_PREBUILT_SDK_URL = 'https://unpkg.com/@zegocloud/zego-uikit-prebuilt/zego-uikit-prebuilt.js'
-let zegoPrebuiltLoadingPromise: Promise<void> | null = null
 
 function readCase(): TeleconsultCase {
   try {
@@ -36,100 +34,53 @@ function readCase(): TeleconsultCase {
   }
 }
 
-async function loadZegoPrebuiltSdk() {
-  const sdk = (window as unknown as { ZegoUIKitPrebuilt?: any }).ZegoUIKitPrebuilt
-  if (sdk) return sdk
-
-  if (!zegoPrebuiltLoadingPromise) {
-    zegoPrebuiltLoadingPromise = new Promise((resolve, reject) => {
-      const existingScript = document.querySelector<HTMLScriptElement>("script[data-zego-prebuilt='true']")
-      if (existingScript) {
-        existingScript.addEventListener('load', () => resolve(), { once: true })
-        existingScript.addEventListener('error', () => reject(new Error('Failed to load Zego prebuilt SDK')), { once: true })
-        return
-      }
-
-      const script = document.createElement('script')
-      script.src = ZEGO_PREBUILT_SDK_URL
-      script.async = true
-      script.dataset.zegoPrebuilt = 'true'
-      script.onload = () => resolve()
-      script.onerror = () => reject(new Error('Failed to load Zego prebuilt SDK'))
-      document.body.appendChild(script)
-    })
-  }
-
-  await zegoPrebuiltLoadingPromise
-  const loaded = (window as unknown as { ZegoUIKitPrebuilt?: any }).ZegoUIKitPrebuilt
-  if (!loaded) throw new Error('Zego prebuilt SDK unavailable')
-  return loaded
-}
-
 function TeleconsultRoom({ onNavigate }: TeleconsultRoomProps) {
   const [phase, setPhase] = useState<Phase>('connecting')
   const [error, setError] = useState('')
   const [helperMessage, setHelperMessage] = useState('Joining your consultation room...')
   const [reconnectNonce, setReconnectNonce] = useState(0)
-  const zegoContainerRef = useRef<HTMLDivElement | null>(null)
-  const zegoTemplateInstanceRef = useRef<any>(null)
+  const localVideoRef = useRef<HTMLVideoElement | null>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null)
+  const peerRef = useRef<RTCPeerConnection | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+  const localStreamRef = useRef<MediaStream | null>(null)
   const retryCountRef = useRef(0)
   const currentCase = useMemo(() => readCase(), [])
   const profile = getDoctorProfile()
   const doctorName = profile.fullName ?? 'Doctor'
   const doctorId = profile.userId ?? (profile.mobile ?? 'doctor-demo').replace(/\s+/g, '')
+  const companyId = (import.meta.env.VITE_COMPANY_ID as string | undefined) ?? 'hcltech'
+
+  function teardownCall() {
+    if (peerRef.current) {
+      peerRef.current.ontrack = null
+      peerRef.current.onicecandidate = null
+      peerRef.current.close()
+      peerRef.current = null
+    }
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop())
+      localStreamRef.current = null
+    }
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null
+    }
+  }
+
+  function buildWsUrl(sessionId: string, participantId: string, role: 'employee' | 'doctor') {
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    return `${protocol}://${window.location.host}/ws/teleconsult?sessionId=${sessionId}&participantId=${participantId}&role=${role}`
+  }
 
   useEffect(() => {
     let isMounted = true
-
-    async function startZegoTemplateCall(rtc: TeleconsultRtcPayload) {
-      const appId = Number(rtc.appId)
-      if (!appId || !rtc.token) {
-        throw new Error('Invalid Zego credentials from backend')
-      }
-
-      const container = zegoContainerRef.current
-      if (!container) {
-        throw new Error('Meeting container unavailable')
-      }
-
-      const ZegoUIKitPrebuilt = await loadZegoPrebuiltSdk()
-      const kitToken = ZegoUIKitPrebuilt.generateKitTokenForProduction(
-        appId,
-        rtc.token,
-        rtc.channelName,
-        rtc.userId,
-        doctorName,
-      )
-
-      const zp = ZegoUIKitPrebuilt.create(kitToken)
-      zegoTemplateInstanceRef.current = zp
-      setPhase('live')
-      zp.joinRoom({
-        container,
-        scenario: {
-          mode: ZegoUIKitPrebuilt.OneONoneCall,
-        },
-        layout: ZegoUIKitPrebuilt.AutoLayout,
-        showPreJoinView: false,
-        turnOnMicrophoneWhenJoining: true,
-        turnOnCameraWhenJoining: true,
-        autoHideFooter: false,
-        showLeaveRoomConfirmDialog: false,
-        showMyCameraToggleButton: true,
-        showMyMicrophoneToggleButton: true,
-        showAudioVideoSettingsButton: false,
-        showTextChat: true,
-        showUserList: false,
-        showRoomDetailsButton: false,
-        showMoreButton: false,
-        showLayoutButton: false,
-        showScreenSharingButton: false,
-        maxUsers: 2,
-        onLeaveRoom: () => {
-          setPhase('ended')
-        },
-      })
-    }
 
     async function bootstrap() {
       try {
@@ -142,36 +93,83 @@ function TeleconsultRoom({ onNavigate }: TeleconsultRoomProps) {
 
         if (!sessionId) {
           const created = await createTeleconsultSession({
-            companyId: import.meta.env.VITE_COMPANY_ID ?? 'hcltech',
+            companyId,
             employeeId: `employee-${currentCase.initials.toLowerCase()}`,
             doctorId,
             appointmentId: currentCase.id,
-            preferredProvider: 'zego',
           })
           sessionId = created.sessionId
           window.sessionStorage.setItem(storageSessionKey, sessionId)
         }
 
-        let joined
-        try {
-          joined = await joinTeleconsultSession(sessionId, {
-            participantType: 'doctor',
-            participantId: doctorId,
-            preferredProvider: 'zego',
-          })
-        } catch {
-          joined = await joinTeleconsultSession(sessionId, {
-            participantType: 'employee',
-            participantId: doctorId,
-            preferredProvider: 'zego',
-          })
-        }
+        const joined = await joinTeleconsultSession(sessionId, {
+          participantType: 'doctor',
+          participantId: doctorId,
+          allowEarlyJoin: true,
+        })
 
         if (!isMounted) return
-        if (joined.rtc.provider !== 'zego') {
-          throw new Error('Active provider is not Zego for this session')
+
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        localStreamRef.current = stream
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream
+          localVideoRef.current.muted = true
+          await localVideoRef.current.play().catch(() => undefined)
         }
-        await startZegoTemplateCall(joined.rtc)
+
+        const peer = new RTCPeerConnection({ iceServers: joined.rtc.iceServers })
+        peerRef.current = peer
+        stream.getTracks().forEach((track) => peer.addTrack(track, stream))
+
+        peer.ontrack = (event) => {
+          const [remoteStream] = event.streams
+          if (remoteVideoRef.current && remoteStream) {
+            remoteVideoRef.current.srcObject = remoteStream
+            void remoteVideoRef.current.play().catch(() => undefined)
+          }
+        }
+
+        const ws = new WebSocket(buildWsUrl(sessionId, doctorId, 'doctor'))
+        wsRef.current = ws
+
+        ws.onmessage = async (message) => {
+          try {
+            const data = JSON.parse(message.data as string) as { type?: string; sdp?: string; candidate?: RTCIceCandidateInit }
+            if (!data.type) return
+            if (data.type === 'offer' && data.sdp) {
+              await peer.setRemoteDescription({ type: 'offer', sdp: data.sdp })
+              const answer = await peer.createAnswer()
+              await peer.setLocalDescription(answer)
+              ws.send(JSON.stringify({ type: 'answer', sdp: answer.sdp }))
+            }
+            if (data.type === 'answer' && data.sdp) {
+              await peer.setRemoteDescription({ type: 'answer', sdp: data.sdp })
+            }
+            if (data.type === 'ice' && data.candidate) {
+              await peer.addIceCandidate(data.candidate)
+            }
+            if (data.type === 'peer-joined') {
+              const offer = await peer.createOffer()
+              await peer.setLocalDescription(offer)
+              ws.send(JSON.stringify({ type: 'offer', sdp: offer.sdp }))
+            }
+          } catch {
+            // ignore malformed messages
+          }
+        }
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: 'join' }))
+        }
+
+        peer.onicecandidate = (event) => {
+          if (event.candidate && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ice', candidate: event.candidate }))
+          }
+        }
+
+        setPhase('live')
       } catch (err) {
         if (!isMounted) return
         if (retryCountRef.current < 4) {
@@ -192,19 +190,9 @@ function TeleconsultRoom({ onNavigate }: TeleconsultRoomProps) {
     void bootstrap()
     return () => {
       isMounted = false
-      if (zegoTemplateInstanceRef.current) {
-        try {
-          zegoTemplateInstanceRef.current.destroy()
-        } catch {
-          // ignore cleanup error
-        }
-        zegoTemplateInstanceRef.current = null
-      }
-      if (zegoContainerRef.current) {
-        zegoContainerRef.current.innerHTML = ''
-      }
+      teardownCall()
     }
-  }, [currentCase.id, currentCase.initials, doctorId, doctorName, onNavigate, reconnectNonce])
+  }, [companyId, currentCase.id, currentCase.initials, doctorId, doctorName, onNavigate, reconnectNonce])
 
   return (
     <section className={`tele-room-page ${phase === 'live' ? 'live' : ''}`}>
@@ -238,7 +226,30 @@ function TeleconsultRoom({ onNavigate }: TeleconsultRoomProps) {
           </section>
         ) : null}
 
-        <div ref={zegoContainerRef} className="zego-room-container" />
+        <div className="tele-room-video">
+          <div className="tele-room-video-remote">
+            <video ref={remoteVideoRef} autoPlay playsInline className="tele-room-video-stream" />
+            <div className="tele-room-video-placeholder">
+              <span>Waiting for patient video…</span>
+            </div>
+          </div>
+          <div className="tele-room-video-local">
+            <video ref={localVideoRef} autoPlay playsInline muted className="tele-room-video-stream" />
+            <span>Doctor</span>
+          </div>
+          <div className="tele-room-controls">
+            <button
+              type="button"
+              className="end-call-btn"
+              onClick={() => {
+                teardownCall()
+                setPhase('ended')
+              }}
+            >
+              End Call
+            </button>
+          </div>
+        </div>
 
         {phase === 'ended' ? (
           <section className="tele-room-complete-sheet">
