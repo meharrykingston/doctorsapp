@@ -674,11 +674,11 @@ function Store({ onNavigate }: StoreProps) {
                     <h4>Select Billing Address</h4>
                     <button type="button" className={`address-card ${selectedAddress === 'clinic' ? 'active' : ''}`} onClick={() => setSelectedAddress('clinic')}>
                       <strong>Clinic Address</strong>
-                      <p>Astikan MedCare, Koramangala, Bengaluru</p>
+                      <p>Astikan MedCare, Connaught Place, New Delhi</p>
                     </button>
                     <button type="button" className={`address-card ${selectedAddress === 'home' ? 'active' : ''}`} onClick={() => setSelectedAddress('home')}>
                       <strong>Home Address</strong>
-                      <p>HSR Layout Sector 2, Bengaluru</p>
+                      <p>Sector 62, Noida, Uttar Pradesh</p>
                     </button>
                   </section>
                 ) : null}

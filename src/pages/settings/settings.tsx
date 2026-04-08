@@ -15,7 +15,7 @@ function Settings({ onNavigate }: SettingsProps) {
   const [fullName, setFullName] = useState(cachedProfile.fullName?.replace(/^Dr\.\s*/i, '') ?? 'Sarah Kumar')
   const [email, setEmail] = useState(cachedProfile.email ?? 'doctor@astikan.com')
   const [mobile, setMobile] = useState(cachedProfile.mobile ?? '')
-  const [practiceAddress, setPracticeAddress] = useState(cachedProfile.practiceAddress ?? 'Clinic address not added')
+  const [practiceAddress, setPracticeAddress] = useState(cachedProfile.practiceAddress ?? 'Astikan OPD Clinic, Connaught Place, New Delhi')
   const [shortBio, setShortBio] = useState(
     cachedProfile.shortBio ?? 'General physician focused on patient-first care, teleconsultation, and continuity follow-up.',
   )
@@ -53,7 +53,7 @@ function Settings({ onNavigate }: SettingsProps) {
         setFullName((profilePatch.fullName ?? '').replace(/^Dr\.\s*/i, '') || 'Sarah Kumar')
         setEmail(profilePatch.email ?? 'doctor@astikan.com')
         setMobile(profilePatch.mobile ?? '')
-        setPracticeAddress(profilePatch.practiceAddress ?? 'Clinic address not added')
+        setPracticeAddress(profilePatch.practiceAddress ?? 'Astikan OPD Clinic, Connaught Place, New Delhi')
         setShortBio(profilePatch.shortBio ?? shortBio)
       })
       .catch(() => {

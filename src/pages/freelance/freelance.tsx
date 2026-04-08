@@ -37,7 +37,7 @@ const openCases: CaseItem[] = [
     hospital: 'MetroCare Hospital',
     speciality: 'Cardiology',
     caseType: 'Post-PCI review',
-    city: 'Bengaluru',
+    city: 'New Delhi',
     budgetInr: 7000,
     mode: 'Hybrid',
     urgency: 'High',
